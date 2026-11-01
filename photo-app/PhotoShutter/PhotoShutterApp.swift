@@ -15,15 +15,18 @@ final class AppState: ObservableObject {
         }
     }
 
-    func signIn(email: String, password: String) async {
+    func signIn(email: String, password: String, serverUrl: String, serverKey: String) async {
         busy = true
         error = ""
+        let old = Config.snapshot()
+        Config.save(url: serverUrl, key: serverKey)
         do {
             try await Backend.shared.signIn(email: email, password: password)
             loggedIn = true
             await uploader.flush()
         } catch {
-            self.error = "Неверная почта или пароль"
+            Config.restore(old)
+            self.error = "Не удалось войти. Проверьте почту, пароль и адрес сервера"
         }
         busy = false
     }
