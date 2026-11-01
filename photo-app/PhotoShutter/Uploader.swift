@@ -45,6 +45,7 @@ final class Uploader: ObservableObject {
                 try await Backend.shared.upload(d, name: f.lastPathComponent)
                 try? FileManager.default.removeItem(at: f)
                 sent += 1
+                Buzz.sent()
                 status = ""
             } catch {
                 status = "Нет связи, отправлю позже"
