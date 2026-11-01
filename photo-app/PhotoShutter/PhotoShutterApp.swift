@@ -10,6 +10,7 @@ final class AppState: ObservableObject {
 
     init() {
         camera.onPhoto = { [weak self] data in
+            Buzz.shutter()
             Task { @MainActor in self?.uploader.enqueue(data) }
         }
     }
