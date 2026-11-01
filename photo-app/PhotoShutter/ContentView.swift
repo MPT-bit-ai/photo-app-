@@ -72,7 +72,6 @@ struct CameraScreen: View {
 
     private func shoot() {
         app.camera.shoot()
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         flash = true
         withAnimation(.easeOut(duration: 0.2)) { flash = false }
     }
