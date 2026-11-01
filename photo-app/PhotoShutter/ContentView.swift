@@ -18,27 +18,53 @@ struct LoginScreen: View {
     @EnvironmentObject var app: AppState
     @State private var email = ""
     @State private var password = ""
+    @State private var serverUrl = Config.customUrl
+    @State private var serverKey = Config.customKey
 
     var body: some View {
-        VStack(spacing: 12) {
-            Text("Вход").font(.title.bold()).frame(maxWidth: .infinity, alignment: .leading)
-            TextField("Почта", text: $email)
-                .textContentType(.username).keyboardType(.emailAddress)
-                .textInputAutocapitalization(.never).autocorrectionDisabled()
-                .padding(12).background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
-            SecureField("Пароль", text: $password)
-                .textContentType(.password)
-                .padding(12).background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
-            Text(app.error).foregroundStyle(.red).font(.footnote).frame(maxWidth: .infinity, alignment: .leading)
-            Button {
-                Task { await app.signIn(email: email.trimmingCharacters(in: .whitespaces), password: password) }
-            } label: {
-                Text(app.busy ? "Входим…" : "Войти").frame(maxWidth: .infinity).padding(12)
+        ScrollView {
+            VStack(spacing: 12) {
+                Text("Вход").font(.title.bold()).frame(maxWidth: .infinity, alignment: .leading)
+                TextField("Почта", text: $email)
+                    .textContentType(.username).keyboardType(.emailAddress)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .padding(12).background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+                SecureField("Пароль", text: $password)
+                    .textContentType(.password)
+                    .padding(12).background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+
+                DisclosureGroup("Свой сервер Supabase") {
+                    VStack(spacing: 10) {
+                        TextField("Адрес проекта (https://…supabase.co)", text: $serverUrl)
+                            .keyboardType(.URL)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                            .padding(12).background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+                        TextField("Публичный ключ (publishable или anon)", text: $serverKey)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                            .padding(12).background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+                        Text("Оставьте пустым, чтобы использовать сервер по умолчанию.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.top, 8)
+                }
+
+                Text(app.error).foregroundStyle(.red).font(.footnote).frame(maxWidth: .infinity, alignment: .leading)
+                Button {
+                    Task {
+                        await app.signIn(email: email.trimmingCharacters(in: .whitespaces),
+                                         password: password,
+                                         serverUrl: serverUrl,
+                                         serverKey: serverKey)
+                    }
+                } label: {
+                    Text(app.busy ? "Входим…" : "Войти").frame(maxWidth: .infinity).padding(12)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(app.busy || email.isEmpty || password.isEmpty)
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(app.busy || email.isEmpty || password.isEmpty)
+            .padding(24)
         }
-        .padding(24)
     }
 }
 
