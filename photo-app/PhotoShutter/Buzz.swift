@@ -9,7 +9,7 @@ enum Buzz {
 
     // фото отправлено: три подряд
     static func sent() {
-        Buzz.pulse(3)
+        Buzz.pulse(2)
     }
 
     private static func pulse(_ n: Int) {
