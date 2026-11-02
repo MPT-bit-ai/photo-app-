@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Фото</title>
+<style>
+:root{--bg:#101214;--panel:#1a1d20;--text:#e8e6e1;--muted:#8a8f94;--accent:#8fb8ff;--danger:#ff8a80}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:16px/1.4 -apple-system,"Segoe UI",Roboto,sans-serif}
+[hidden]{display:none!important}
+button,input{font:inherit}
+#login{min-height:100%;display:grid;place-items:center;padding:24px}
+#login form{width:100%;max-width:340px;display:grid;gap:12px}
+#login h1{margin:0 0 8px;font-size:24px;font-weight:600}
+input{width:100%;padding:12px 14px;border-radius:10px;border:1px solid #2c3136;background:var(--panel);color:var(--text)}
+input:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn{padding:12px 14px;border-radius:10px;border:0;background:var(--accent);color:#0b1220;font-weight:600;cursor:pointer}
+.err{color:var(--danger);min-height:1.4em;font-size:14px}
+header{position:sticky;top:0;z-index:5;display:flex;justify-content:space-between;align-items:center;padding:calc(10px + env(safe-area-inset-top)) 14px 10px;background:rgba(16,18,20,.92);backdrop-filter:blur(8px)}
+header span{color:var(--muted);font-size:14px}
+header input[type=range]{width:110px;padding:0;margin:0 8px;accent-color:var(--accent)}
+.zb{font-size:22px;padding:2px 14px}
+.link{background:none;border:0;color:var(--accent);cursor:pointer;padding:6px}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--cell,110px),1fr));gap:2px;padding:0 0 env(safe-area-inset-bottom)}
+#grid button{padding:0;border:0;background:var(--panel);aspect-ratio:1;cursor:pointer}
+#grid img{width:100%;height:100%;object-fit:cover;display:block}
+#empty{padding:60px 24px;text-align:center;color:var(--muted)}
+#lb{position:fixed;inset:0;z-index:20;background:#000;display:flex;flex-direction:column}
+#stage{flex:1;position:relative;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+#stage img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;transform-origin:center;will-change:transform;-webkit-user-drag:none;pointer-events:none}
+.bar{display:flex;justify-content:space-between;align-items:center;padding:calc(8px + env(safe-area-inset-top)) 12px 8px;font-size:14px;color:var(--muted)}
+.bar.bottom{padding:8px 12px calc(8px + env(safe-area-inset-bottom))}
+.nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:64px;border:0;border-radius:10px;background:rgba(0,0,0,.45);color:#fff;font-size:26px;cursor:pointer}
+#prev{left:8px}#next{right:8px}
+@media (pointer:coarse){.nav{display:none}}
+@media (prefers-reduced-motion:no-preference){#stage img.anim{transition:transform .2s}}
+</style>
+</head>
+<body>
+
+<section id="login" hidden>
+  <form id="loginForm">
+    <h1>Вход</h1>
+    <input id="email" type="email" placeholder="Почта" autocomplete="username" required>
+    <input id="password" type="password" placeholder="Пароль" autocomplete="current-password" required>
+    <div class="err" id="loginErr"></div>
+    <button class="btn" type="submit">Войти</button>
+  </form>
+</section>
+
+<section id="app" hidden>
+  <header><span id="count"></span><input id="size" type="range" min="70" max="320" value="110" aria-label="Размер миниатюр"><button class="link" id="logout">Выйти</button></header>
+  <div id="grid"></div>
+  <div id="empty" hidden>Фото пока нет. Они появятся здесь, как только их снимут.</div>
+</section>
+
+<div id="lb" hidden>
+  <div class="bar"><span id="counter"></span><button class="link" id="close">Закрыть</button></div>
+  <div id="stage">
+    <img id="lbimg" alt="">
+    <button class="nav" id="prev" aria-label="Назад">‹</button>
+    <button class="nav" id="next" aria-label="Вперёд">›</button>
+  </div>
+  <div class="bar bottom"><span id="when"></span><span><button class="link zb" id="zout" aria-label="Уменьшить">−</button><button class="link zb" id="zin" aria-label="Увеличить">+</button></span><button class="link" id="del" style="color:var(--danger)">Удалить</button></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
+<script>
+const SUPABASE_URL = 'https://gisjcvenulyituqshdrz.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_LVGjAvz7YWdtY5L7Cn0sRg_Uy2FN2kY';
+const BUCKET = 'photos';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const $ = id => document.getElementById(id);
+
+let photos = [];   // {id, path, created_at, url}
+let channel = null;
+let cur = 0;
+
+/* ---------- вход ---------- */
+$('loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('loginErr').textContent = '';
+  const { error } = await sb.auth.signInWithPassword({ email: $('email').value.trim(), password: $('password').value });
+  if (error) $('loginErr').textContent = 'Неверная почта или пароль.';
+});
+$('logout').onclick = () => sb.auth.signOut();
+
+sb.auth.onAuthStateChange((_ev, session) => { session ? start() : stop(); });
+sb.auth.getSession().then(({ data }) => { if (!data.session) stop(); });
+
+function stop() {
+  if (channel) { sb.removeChannel(channel); channel = null; }
+  photos = [];
+  closeLb();
+  $('app').hidden = true;
+  $('login').hidden = false;
+}
+
+async function start() {
+  $('login').hidden = true;
+  $('app').hidden = false;
+  await load();
+  if (!channel) {
+    channel = sb.channel('photos-live')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'photos' }, async p => {
+        if (photos.some(x => x.id === p.new.id)) return;
+        const url = await sign(p.new.path);
+        photos.unshift({ ...p.new, url });
+        render();
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'photos' }, p => {
+        photos = photos.filter(x => x.id !== p.old.id);
+        render();
+      })
+      .subscribe();
+  }
+}
+
+async function sign(path) {
+  const { data } = await sb.storage.from(BUCKET).createSignedUrl(path, 3600);
+  return data ? data.signedUrl : '';
+}
+
+async function load() {
+  const { data, error } = await sb.from('photos').select('*').order('created_at', { ascending: false }).limit(500);
+  if (error) { $('count').textContent = 'Ошибка загрузки'; return; }
+  const paths = data.map(r => r.path);
+  let urls = {};
+  if (paths.length) {
+    const res = await sb.storage.from(BUCKET).createSignedUrls(paths, 3600);
+    (res.data || []).forEach(r => { urls[r.path] = r.signedUrl; });
+  }
+  photos = data.map(r => ({ ...r, url: urls[r.path] || '' }));
+  render();
+}
+
+/* ---------- сетка ---------- */
+function render() {
+  const g = $('grid');
+  g.textContent = '';
+  photos.forEach((p, i) => {
+    const b = document.createElement('button');
+    b.setAttribute('aria-label', 'Открыть фото ' + (i + 1));
+    const img = document.createElement('img');
+    img.loading = 'lazy'; img.src = p.url; img.alt = '';
+    b.appendChild(img);
+    b.onclick = () => openLb(i);
+    g.appendChild(b);
+  });
+  $('count').textContent = photos.length ? 'Фото: ' + photos.length : '';
+  $('empty').hidden = photos.length > 0;
+  if (!$('lb').hidden) { if (!photos.length) closeLb(); else show(Math.min(cur, photos.length - 1)); }
+}
+
+/* ---------- просмотр ---------- */
+const stage = $('stage'), img = $('lbimg');
+let scale = 1, tx = 0, ty = 0;
+const apply = () => { img.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`; };
+const reset = (anim) => { img.classList.toggle('anim', !!anim); scale = 1; tx = 0; ty = 0; apply(); };
+
+function openLb(i) { $('lb').hidden = false; document.body.style.overflow = 'hidden'; show(i); }
+function closeLb() { $('lb').hidden = true; document.body.style.overflow = ''; }
+function show(i) {
+  cur = (i + photos.length) % photos.length;
+  const p = photos[cur];
+  reset(false);
+  img.src = p.url;
+  $('counter').textContent = (cur + 1) + ' из ' + photos.length;
+  $('when').textContent = new Date(p.created_at).toLocaleString('ru-RU');
+  [cur + 1, cur - 1].forEach(j => { const q = photos[(j + photos.length) % photos.length]; if (q) new Image().src = q.url; });
+}
+const go = d => show(cur + d);
+
+$('close').onclick = closeLb;
+$('prev').onclick = () => go(-1);
+$('next').onclick = () => go(1);
+document.addEventListener('keydown', e => {
+  if ($('lb').hidden) return;
+  if (e.key === 'Escape') closeLb();
+  if (e.key === 'ArrowLeft') go(-1);
+  if (e.key === 'ArrowRight') go(1);
+});
+
+$('del').onclick = async () => {
+  const p = photos[cur];
+  if (!p || !confirm('Удалить это фото?')) return;
+  await sb.storage.from(BUCKET).remove([p.path]);
+  const { error } = await sb.from('photos').delete().eq('id', p.id);
+  if (error) { alert('Не удалось удалить.'); return; }
+  photos = photos.filter(x => x.id !== p.id);
+  render();
+};
+
+/* размер миниатюр */
+const sizeEl = $('size');
+try { const v = localStorage.getItem('cell'); if (v) sizeEl.value = v; } catch (e) {}
+const setCell = () => {
+  document.documentElement.style.setProperty('--cell', sizeEl.value + 'px');
+  try { localStorage.setItem('cell', sizeEl.value); } catch (e) {}
+};
+sizeEl.addEventListener('input', setCell);
+setCell();
+
+/* кнопки масштаба в просмотре */
+function zoomBy(f) {
+  img.classList.add('anim');
+  scale = Math.min(6, Math.max(1, scale * f));
+  if (scale === 1) { tx = 0; ty = 0; }
+  apply();
+}
+$('zin').onclick = () => zoomBy(1.5);
+$('zout').onclick = () => zoomBy(1 / 1.5);
+
+/* жесты: щипок, перетаскивание, свайп, двойной тап, колесо */
+const pts = new Map();
+let startDist = 0, startScale = 1, sx = 0, sy = 0, stx = 0, sty = 0, downX = null, downT = 0, lastTap = 0, moved = 0;
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+stage.addEventListener('pointerdown', e => {
+  stage.setPointerCapture(e.pointerId);
+  pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  img.classList.remove('anim');
+  if (pts.size === 2) {
+    const [a, b] = [...pts.values()];
+    startDist = Math.hypot(a.x - b.x, a.y - b.y); startScale = scale; downX = null;
+  } else {
+    sx = e.clientX; sy = e.clientY; stx = tx; sty = ty; downX = e.clientX; downT = Date.now(); moved = 0;
+  }
+});
+stage.addEventListener('pointermove', e => {
+  if (!pts.has(e.pointerId)) return;
+  pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pts.size === 2) {
+    const [a, b] = [...pts.values()];
+    scale = clamp(startScale * Math.hypot(a.x - b.x, a.y - b.y) / startDist, 1, 6); apply();
+  } else if (scale > 1) {
+    tx = stx + e.clientX - sx; ty = sty + e.clientY - sy; apply();
+  }
+  moved = Math.max(moved, Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy));
+});
+function endPtr(e) {
+  const was = pts.size;
+  pts.delete(e.pointerId);
+  if (pts.size === 1) {
+    const p = [...pts.values()][0]; sx = p.x; sy = p.y; stx = tx; sty = ty; downX = null;
+  }
+  if (was === 1) {
+    if (scale <= 1.02) {
+      reset(true);
+      const dx = downX === null ? 0 : e.clientX - downX;
+      if (Math.abs(dx) > 60) { go(dx < 0 ? 1 : -1); return; }
+    }
+    if (moved < 10 && Date.now() - downT < 300) {
+      const now = Date.now();
+      if (now - lastTap < 300) { toggleZoom(e); lastTap = 0; } else lastTap = now;
+    }
+  }
+}
+stage.addEventListener('pointerup', endPtr);
+stage.addEventListener('pointercancel', endPtr);
+
+function toggleZoom(e) {
+  img.classList.add('anim');
+  if (scale > 1) { reset(true); return; }
+  const r = stage.getBoundingClientRect();
+  scale = 2.5;
+  tx = (r.width / 2 - (e.clientX - r.left)) * (scale - 1);
+  ty = (r.height / 2 - (e.clientY - r.top)) * (scale - 1);
+  apply();
+}
+stage.addEventListener('wheel', e => {
+  e.preventDefault();
+  scale = clamp(scale * (e.deltaY < 0 ? 1.15 : 1 / 1.15), 1, 6);
+  if (scale === 1) { tx = 0; ty = 0; }
+  apply();
+}, { passive: false });
+</script>
+</body>
+</html>
