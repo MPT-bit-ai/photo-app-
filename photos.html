@@ -14,17 +14,27 @@ button,input{font:inherit}
 #login form{width:100%;max-width:340px;display:grid;gap:12px}
 #login h1{margin:0 0 8px;font-size:24px;font-weight:600}
 input{width:100%;padding:12px 14px;border-radius:10px;border:1px solid #2c3136;background:var(--panel);color:var(--text)}
-input:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input:focus,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+details{color:var(--muted);font-size:14px}
+summary{cursor:pointer;padding:4px 0}
+details input{margin-top:8px}
+.hint{margin-top:6px;font-size:13px}
 .btn{padding:12px 14px;border-radius:10px;border:0;background:var(--accent);color:#0b1220;font-weight:600;cursor:pointer}
+.btn:disabled{opacity:.6;cursor:default}
 .err{color:var(--danger);min-height:1.4em;font-size:14px}
-header{position:sticky;top:0;z-index:5;display:flex;justify-content:space-between;align-items:center;padding:calc(10px + env(safe-area-inset-top)) 14px 10px;background:rgba(16,18,20,.92);backdrop-filter:blur(8px)}
+header{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:4px 10px;justify-content:space-between;align-items:center;padding:calc(10px + env(safe-area-inset-top)) 14px 10px;background:rgba(16,18,20,.92);backdrop-filter:blur(8px)}
 header span{color:var(--muted);font-size:14px}
-header input[type=range]{width:110px;padding:0;margin:0 8px;accent-color:var(--accent)}
+header input[type=range]{width:110px;padding:0;margin:0 4px;accent-color:var(--accent)}
+.hbtns{display:flex;flex-wrap:wrap;align-items:center;gap:2px}
 .zb{font-size:22px;padding:2px 14px}
 .link{background:none;border:0;color:var(--accent);cursor:pointer;padding:6px}
+.link:disabled{opacity:.4;cursor:default}
 #grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--cell,110px),1fr));gap:2px;padding:0 0 env(safe-area-inset-bottom)}
-#grid button{padding:0;border:0;background:var(--panel);aspect-ratio:1;cursor:pointer}
+#grid button{position:relative;padding:0;border:0;background:var(--panel);aspect-ratio:1;cursor:pointer}
 #grid img{width:100%;height:100%;object-fit:cover;display:block}
+#grid.selmode button:not(.sel)::after{content:"";position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:50%;border:2px solid #fff;background:rgba(0,0,0,.3)}
+#grid button.sel::after{content:"✓";position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#0b1220;font-weight:700;font-size:14px;display:grid;place-items:center}
+#grid button.sel img{opacity:.55}
 #empty{padding:60px 24px;text-align:center;color:var(--muted)}
 #lb{position:fixed;inset:0;z-index:20;background:#000;display:flex;flex-direction:column}
 #stage{flex:1;position:relative;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
@@ -44,13 +54,28 @@ header input[type=range]{width:110px;padding:0;margin:0 8px;accent-color:var(--a
     <h1>Вход</h1>
     <input id="email" type="email" placeholder="Почта" autocomplete="username" required>
     <input id="password" type="password" placeholder="Пароль" autocomplete="current-password" required>
+    <details id="srv">
+      <summary>Свой сервер Supabase</summary>
+      <input id="srvUrl" type="text" placeholder="Адрес проекта (https://…supabase.co)" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <input id="srvKey" type="text" placeholder="Публичный ключ (publishable или anon)" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <div class="hint">Оставьте пустым, чтобы использовать сервер по умолчанию.</div>
+    </details>
     <div class="err" id="loginErr"></div>
-    <button class="btn" type="submit">Войти</button>
+    <button class="btn" id="loginBtn" type="submit">Войти</button>
   </form>
 </section>
 
 <section id="app" hidden>
-  <header><span id="count"></span><input id="size" type="range" min="70" max="320" value="110" aria-label="Размер миниатюр"><button class="link" id="logout">Выйти</button></header>
+  <header>
+    <span id="count"></span>
+    <input id="size" type="range" min="70" max="320" value="110" aria-label="Размер миниатюр">
+    <div class="hbtns">
+      <button class="link" id="selBtn">Выбрать</button>
+      <button class="link" id="allBtn" hidden>Все</button>
+      <button class="link" id="delSel" style="color:var(--danger)" hidden>Удалить</button>
+      <button class="link" id="logout">Выйти</button>
+    </div>
+  </header>
   <div id="grid"></div>
   <div id="empty" hidden>Фото пока нет. Они появятся здесь, как только их снимут.</div>
 </section>
@@ -62,36 +87,92 @@ header input[type=range]{width:110px;padding:0;margin:0 8px;accent-color:var(--a
     <button class="nav" id="prev" aria-label="Назад">‹</button>
     <button class="nav" id="next" aria-label="Вперёд">›</button>
   </div>
-  <div class="bar bottom"><span id="when"></span><span><button class="link zb" id="zout" aria-label="Уменьшить">−</button><button class="link zb" id="zin" aria-label="Увеличить">+</button></span><button class="link" id="del" style="color:var(--danger)">Удалить</button></div>
+  <div class="bar bottom">
+    <span id="when"></span>
+    <span><button class="link zb" id="zout" aria-label="Уменьшить">−</button><button class="link zb" id="zin" aria-label="Увеличить">+</button></span>
+    <button class="link" id="del" style="color:var(--danger)">Удалить</button>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
 <script>
-const SUPABASE_URL = 'https://gisjcvenulyituqshdrz.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_LVGjAvz7YWdtY5L7Cn0sRg_Uy2FN2kY';
+const DEFAULT = {
+  url: 'https://gisjcvenulyituqshdrz.supabase.co',
+  key: 'sb_publishable_LVGjAvz7YWdtY5L7Cn0sRg_Uy2FN2kY'
+};
 const BUCKET = 'photos';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const $ = id => document.getElementById(id);
 
+/* ---------- настройки сервера ---------- */
+function loadCfg() {
+  try {
+    const c = JSON.parse(localStorage.getItem('sb_cfg') || 'null');
+    if (c && c.url && c.key) return c;
+  } catch (e) {}
+  return { ...DEFAULT };
+}
+function saveCfg(c) {
+  try {
+    if (c.url === DEFAULT.url && c.key === DEFAULT.key) localStorage.removeItem('sb_cfg');
+    else localStorage.setItem('sb_cfg', JSON.stringify(c));
+  } catch (e) {}
+}
+function normUrl(s) {
+  let t = s.trim();
+  if (!t) return '';
+  if (!/^https?:\/\//i.test(t)) t = 'https://' + t;
+  return t.replace(/\/+$/, '');
+}
+
+let cfg = loadCfg();
+let sb = null, authSub = null, channel = null;
 let photos = [];   // {id, path, created_at, url}
-let channel = null;
 let cur = 0;
+let selMode = false;
+const sel = new Set();
+
+if (cfg.url !== DEFAULT.url || cfg.key !== DEFAULT.key) {
+  $('srvUrl').value = cfg.url;
+  $('srvKey').value = cfg.key;
+  $('srv').open = true;
+}
+
+function connect(url, key) {
+  if (authSub) authSub.unsubscribe();
+  sb = supabase.createClient(url, key);
+  const { data } = sb.auth.onAuthStateChange((_ev, session) => { session ? start() : stop(); });
+  authSub = data.subscription;
+  sb.auth.getSession().then(({ data }) => { if (!data.session) stop(); });
+}
 
 /* ---------- вход ---------- */
 $('loginForm').addEventListener('submit', async e => {
   e.preventDefault();
   $('loginErr').textContent = '';
-  const { error } = await sb.auth.signInWithPassword({ email: $('email').value.trim(), password: $('password').value });
-  if (error) $('loginErr').textContent = 'Неверная почта или пароль.';
+  const u = normUrl($('srvUrl').value);
+  const k = $('srvKey').value.trim();
+  const want = (u && k) ? { url: u, key: k } : { ...DEFAULT };
+  const prev = cfg;
+  const changed = want.url !== cfg.url || want.key !== cfg.key;
+  $('loginBtn').disabled = true;
+  try {
+    if (changed) { cfg = want; connect(cfg.url, cfg.key); }
+    const { error } = await sb.auth.signInWithPassword({ email: $('email').value.trim(), password: $('password').value });
+    if (error) throw error;
+    saveCfg(cfg);
+  } catch (err) {
+    $('loginErr').textContent = 'Не удалось войти. Проверьте почту, пароль и адрес сервера.';
+    if (changed) { cfg = prev; connect(cfg.url, cfg.key); }
+  }
+  $('loginBtn').disabled = false;
 });
 $('logout').onclick = () => sb.auth.signOut();
 
-sb.auth.onAuthStateChange((_ev, session) => { session ? start() : stop(); });
-sb.auth.getSession().then(({ data }) => { if (!data.session) stop(); });
-
 function stop() {
-  if (channel) { sb.removeChannel(channel); channel = null; }
+  if (channel) { channel.unsubscribe(); channel = null; }
   photos = [];
+  sel.clear();
+  selMode = false;
   closeLb();
   $('app').hidden = true;
   $('login').hidden = false;
@@ -126,7 +207,7 @@ async function load() {
   const { data, error } = await sb.from('photos').select('*').order('created_at', { ascending: false }).limit(500);
   if (error) { $('count').textContent = 'Ошибка загрузки'; return; }
   const paths = data.map(r => r.path);
-  let urls = {};
+  const urls = {};
   if (paths.length) {
     const res = await sb.storage.from(BUCKET).createSignedUrls(paths, 3600);
     (res.data || []).forEach(r => { urls[r.path] = r.signedUrl; });
@@ -135,29 +216,87 @@ async function load() {
   render();
 }
 
-/* ---------- сетка ---------- */
+/* ---------- сетка и выбор ---------- */
+function updateHeader() {
+  $('count').textContent = selMode ? 'Выбрано: ' + sel.size : (photos.length ? 'Фото: ' + photos.length : '');
+  $('selBtn').textContent = selMode ? 'Отмена' : 'Выбрать';
+  $('selBtn').hidden = photos.length === 0 && !selMode;
+  $('allBtn').hidden = !selMode;
+  $('allBtn').textContent = (photos.length && sel.size === photos.length) ? 'Снять' : 'Все';
+  $('delSel').hidden = !selMode;
+  $('delSel').textContent = 'Удалить (' + sel.size + ')';
+  $('delSel').disabled = sel.size === 0;
+}
+
 function render() {
   const g = $('grid');
   g.textContent = '';
+  g.classList.toggle('selmode', selMode);
+  for (const id of [...sel]) if (!photos.some(p => p.id === id)) sel.delete(id);
   photos.forEach((p, i) => {
     const b = document.createElement('button');
-    b.setAttribute('aria-label', 'Открыть фото ' + (i + 1));
+    if (sel.has(p.id)) b.className = 'sel';
+    b.setAttribute('aria-label', 'Фото ' + (i + 1));
     const img = document.createElement('img');
     img.loading = 'lazy'; img.src = p.url; img.alt = '';
     b.appendChild(img);
-    b.onclick = () => openLb(i);
+    b.onclick = () => {
+      if (selMode) {
+        sel.has(p.id) ? sel.delete(p.id) : sel.add(p.id);
+        b.classList.toggle('sel', sel.has(p.id));
+        updateHeader();
+      } else {
+        openLb(i);
+      }
+    };
     g.appendChild(b);
   });
-  $('count').textContent = photos.length ? 'Фото: ' + photos.length : '';
   $('empty').hidden = photos.length > 0;
+  updateHeader();
   if (!$('lb').hidden) { if (!photos.length) closeLb(); else show(Math.min(cur, photos.length - 1)); }
 }
+
+$('selBtn').onclick = () => { selMode = !selMode; sel.clear(); render(); };
+$('allBtn').onclick = () => {
+  if (photos.length && sel.size === photos.length) sel.clear();
+  else photos.forEach(p => sel.add(p.id));
+  render();
+};
+$('delSel').onclick = async () => {
+  const chosen = photos.filter(p => sel.has(p.id));
+  if (!chosen.length) return;
+  if (!confirm('Удалить выбранные фото (' + chosen.length + ')? Это нельзя отменить.')) return;
+  $('delSel').disabled = true;
+  const r1 = await sb.storage.from(BUCKET).remove(chosen.map(p => p.path));
+  const r2 = await sb.from('photos').delete().in('id', chosen.map(p => p.id));
+  if (r1.error || r2.error) {
+    alert('Не все фото удалось удалить.');
+    await load();
+  } else {
+    const ids = new Set(chosen.map(p => p.id));
+    photos = photos.filter(p => !ids.has(p.id));
+  }
+  sel.clear();
+  selMode = false;
+  render();
+};
+
+/* размер миниатюр */
+const sizeEl = $('size');
+try { const v = localStorage.getItem('cell'); if (v) sizeEl.value = v; } catch (e) {}
+const setCell = () => {
+  document.documentElement.style.setProperty('--cell', sizeEl.value + 'px');
+  try { localStorage.setItem('cell', sizeEl.value); } catch (e) {}
+};
+sizeEl.addEventListener('input', setCell);
+setCell();
 
 /* ---------- просмотр ---------- */
 const stage = $('stage'), img = $('lbimg');
 let scale = 1, tx = 0, ty = 0;
 const apply = () => { img.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`; };
 const reset = (anim) => { img.classList.toggle('anim', !!anim); scale = 1; tx = 0; ty = 0; apply(); };
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 function openLb(i) { $('lb').hidden = false; document.body.style.overflow = 'hidden'; show(i); }
 function closeLb() { $('lb').hidden = true; document.body.style.overflow = ''; }
@@ -192,20 +331,9 @@ $('del').onclick = async () => {
   render();
 };
 
-/* размер миниатюр */
-const sizeEl = $('size');
-try { const v = localStorage.getItem('cell'); if (v) sizeEl.value = v; } catch (e) {}
-const setCell = () => {
-  document.documentElement.style.setProperty('--cell', sizeEl.value + 'px');
-  try { localStorage.setItem('cell', sizeEl.value); } catch (e) {}
-};
-sizeEl.addEventListener('input', setCell);
-setCell();
-
-/* кнопки масштаба в просмотре */
 function zoomBy(f) {
   img.classList.add('anim');
-  scale = Math.min(6, Math.max(1, scale * f));
+  scale = clamp(scale * f, 1, 6);
   if (scale === 1) { tx = 0; ty = 0; }
   apply();
 }
@@ -215,7 +343,6 @@ $('zout').onclick = () => zoomBy(1 / 1.5);
 /* жесты: щипок, перетаскивание, свайп, двойной тап, колесо */
 const pts = new Map();
 let startDist = 0, startScale = 1, sx = 0, sy = 0, stx = 0, sty = 0, downX = null, downT = 0, lastTap = 0, moved = 0;
-const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 stage.addEventListener('pointerdown', e => {
   stage.setPointerCapture(e.pointerId);
@@ -275,6 +402,8 @@ stage.addEventListener('wheel', e => {
   if (scale === 1) { tx = 0; ty = 0; }
   apply();
 }, { passive: false });
+
+connect(cfg.url, cfg.key);
 </script>
 </body>
 </html>
